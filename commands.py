@@ -1,0 +1,131 @@
+import json
+from graph_tools import *
+import argparse
+import os
+
+parser = argparse.ArgumentParser('commands.py')
+
+parser.add_argument("-c", "--config", type=str)
+parser.add_argument("--ip", type=str, help="IP of the host machine")
+
+args = parser.parse_args()
+
+
+class Resource:
+    def __init__(self, name, flavour):
+        self.name = name
+        self.flavour = flavour
+    
+    def read(self):
+        return self
+
+class Service:
+    def __init__(self, name, **kwargs):
+        self.set_keys = kwargs.keys()
+        self.name = name
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+
+    def to_command(self):
+        return "docker run -p {host_port}:{container_port} -t -i {dependencies} {resources} {container}".format(
+            host_port = self.host_port,
+            container_port = self.container_port,
+            resources=self.resources,
+            container=self.container,
+            dependencies = " ".join(serv.to_env_dependency() for _,serv in self.dependencies.items()))
+
+    def to_env_dependency(self):
+        uc = self.name.upper()
+        return "-e {name}_HOST={host} -e {name}_PORT={port}".format(name=uc, port=self.host_port, host = self.host)
+
+
+class FolderMappingResource(Resource):
+    def __init__(self, name, to = None, default="~"):
+        super().__init__(name, "folder")
+        self.host = None
+        self.to = to
+        self.default = os.path.expanduser(default)
+
+    def read(self):
+        self.host = input("Enter folder name for `{0}` resource[{1}]:\n".format(self.name, self.default))
+        if self.host == "":
+            self.host = self.default
+        return self
+
+    def to_flag(self):
+        return "-v {}:{}".format(self.host, self.to)
+
+    def __str__(self):
+        return "FolderMappingResource({} -> {})".format(self.host, self.to)
+
+class EnvironmentResource(Resource):
+    def __init__(self, name, var = None, default=""):
+        super().__init__(name, "env")
+        self.val = None
+        self.var = var
+        self.default = default
+
+    def read(self):
+        self.val = input("Enter ENV value for `{0}` resource [{1}]:\n".format(self.name, self.default))
+        if self.val == "":
+            self.val = self.default
+        return self
+
+    def to_flag(self):
+        return "-e {}={}".format(self.var, self.val)
+
+    def __str__(self):
+        return "EnvironmentResource({}={})".format(self.var, self.val)
+
+
+def read_resources(conf):
+    resources = {}
+    if "resources" in conf:
+        if "folder_mapping" in conf["resources"]:
+            resources.update((a["name"], FolderMappingResource(a["name"], a["to"], a["default"])) for a in conf["resources"]["folder_mapping"])
+
+        if "env" in conf["resources"]:
+            resources.update((a["name"], EnvironmentResource(a["name"], a["var"], a["default"])) for a in conf["resources"]["env"])
+
+    return resources
+
+def get_service_resources(service, resources):
+    if "requires" in service:
+        return [v for k, v in resources.items() if k in service["requires"]]
+
+    return []
+
+def resources_flags(resources):
+    return " ".join(r.to_flag() for r in resources)
+
+conf = json.load(open(args.config))
+resources = read_resources(conf)
+resources = {k: v.read() for k, v in resources.items()}
+
+dependency_graph = {k: v.get("depends", []) for k,v in conf["services"].items()}
+services = {}
+
+for name in tasks_order(dependency_graph):
+    service = conf["services"][name]
+    container = service["container"]
+    host_port = service.get("port", 8080)
+    host = service.get("host", args.ip)
+    container_port = service.get("container_port", 80)
+
+    service_resources = get_service_resources(service, resources)
+
+    kw = {"resources": resources_flags(service_resources), 
+          "container": container,
+          "host_port": host_port,
+          "host": host,
+          "container_port": container_port,
+          "dependencies": {k: services[k] for k in service.get("depends", [])}}
+
+    services[name] = Service(name, **kw)
+
+for name in tasks_order(dependency_graph):
+    print("{1} > {0}.log &".format(name, services[name].to_command()))
+
+
+# for name 
+    # print("docker run -p {host_port}:{container_port} -t -i {resources} {container}".format(**kw))
