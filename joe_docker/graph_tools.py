@@ -26,7 +26,6 @@ def kahn_topsort(graph):
     else:                    # if there is a cycle,  
         return []            # then return an empty list
 
-# dependency_graph = {"spotlight_status_page": ["s3_viewer"], "rendang_viewer": [], "s3_viewer": []}
 
 def invert(graph):
     new_graph = defaultdict(list)

@@ -1,9 +1,9 @@
 import json
-from graph_tools import *
+from joe_docker.graph_tools import *
 import argparse
 import os
 
-parser = argparse.ArgumentParser('commands.py')
+parser = argparse.ArgumentParser('joe_docker')
 
 parser.add_argument("-c", "--config", type=str)
 parser.add_argument("--ip", type=str, help="IP of the host machine")
