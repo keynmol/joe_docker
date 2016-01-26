@@ -28,7 +28,7 @@ class Service:
             setattr(self, k, v)
 
     def to_command(self):
-        return "docker run -p {host_port}:{container_port} -t -i {dependencies} {resources} {container}".format(
+        return "docker run -p {host_port}:{container_port} -d -t -i {dependencies} {resources} {container}".format(
             host_port = self.host_port,
             container_port = self.container_port,
             resources=self.resources,
@@ -125,7 +125,7 @@ for name in tasks_order(dependency_graph):
     services[name] = Service(name, **kw)
 
 for name in tasks_order(dependency_graph):
-    print("{1} > {0}.log &".format(name, services[name].to_command()))
+    print("{1}".format(name, services[name].to_command()))
 
 
 # for name 
